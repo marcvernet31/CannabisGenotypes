@@ -1,0 +1,86 @@
+---
+title: "clustering"
+author: "Jordi and Marc"
+date: "5/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dendextend)
+```
+Load and prepare the data
+```{r}
+setwd(".")
+data = read.csv("conversion.csv")
+drugs = c("ARa", "ARb", "HK", "NL", "SW", "T44a", "T44b", "FFb", "B52", "PM", "BB", "BS", "FFa", "HMW", "HA", "SWA", "MS", "RI")
+
+N = dim(data)[1]
+data$drug = rep("n", N)
+for (name in drugs) {
+  s = grepl(pattern=name, data$ID, fixed=T)
+  data$drug[s] = "d"
+}
+s = grepl(pattern="CHNL", data$ID, fixed=T)
+data$drug[s] = "n"
+
+data$drug = as.factor(data$drug)
+table(data$drug)
+```
+
+Compute the distance matrix with manhattan distance.
+```{r}
+distances = dist(data[c(-1,-175)], method = "manhattan")
+```
+Setting the colors for plotting.
+```{r}
+class.color = function(class) {
+  if (class == "n") {
+    return("blue")
+  }
+  else {
+    return("green2")
+  }
+}
+coloring = c()
+for (i in c(1:N)) {
+  coloring[i] = class.color(data[i,]["drug"])
+}
+```
+
+
+### Hierarchical clustering
+
+```{r}
+ward.clust = hclust(distances, method ="ward.D")
+dendrogram.ward = as.dendrogram(ward.clust)
+
+
+dendrogram.ward = set(dendrogram.ward, "leaves_col", coloring) # change color
+dendrogram.ward = set(dendrogram.ward, "leaves_pch", 0.01)
+dendrogram.ward = set(dendrogram.ward, "leaves_cex", 0.5)
+dendrogram.ward = set(dendrogram.ward, "labels_cex", 0.001)
+plot(dendrogram.ward, main= "Hierarchical Clustering")
+```
+Contingency table and accuracy
+```{r}
+(ct = table(cutree(ward.clust, h = 3000 ), data$drug))
+1-sum(diag(ct))/N
+```
+
+
+### NON Hierarchic
+
+```{r, message=T}
+library("clusterSim")
+```
+
+```{r}
+F.stats = c()
+for (i in c(2:10)) {
+  set.seed(123)
+  cluster.i = kmeans(data[c(-1,-175)], i)
+  (F.stats[i] = index.G1(as.numeric(data$drug), cluster.i$cluster))
+}
+plot(F.stats, type="b", xlab="k", ylab="pseudo F-statistic", main = "F-statistic for k-means clustering")
+```

@@ -1,0 +1,66 @@
+---
+title: "MDS"
+author: "Jordi Puig Rabat"
+date: "5/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Load and prepare the data.
+```{r}
+setwd(".")
+data = read.csv("conversion.csv")
+drugs = c("ARa", "ARb", "HK", "NL", "SW", "T44a", "T44b", "FFb", "B52", "PM", "BB", "BS", "FFa", "HMW", "HA", "SWA", "MS", "RI")
+
+N = dim(data)[1]
+data$drug = rep("n", N)
+for (name in drugs) {
+  s = grepl(pattern=name, data$ID, fixed=T)
+  data$drug[s] = "d"
+}
+s = grepl(pattern="CHNL", data$ID, fixed=T)
+data$drug[s] = "n"
+data$drug = as.factor(data$drug)
+table(data$drug)
+```
+Compute the distance matrix
+```{r}
+distances = dist(data[c(-1,-175)], method = "manhattan")
+```
+Compute the MDS
+```{r}
+k = 2
+weed.mds = cmdscale(distances, k, eig = TRUE)
+weed.eig = weed.mds$eig
+weed.mds = weed.mds$points
+```
+Set the colors for plotting
+```{r}
+class.color = function(class) {
+  if (class == "n") {
+    return("blue")
+  }
+  else {
+    return("green2")
+  }
+}
+coloring = c()
+for (i in c(1:N)) {
+  coloring[i] = class.color(data[i,]["drug"])
+}
+```
+
+Plot the result
+```{r}
+library(rgl)
+if (k == 3) {
+  #plot3d(weed.mds, col = colorings)
+}else {
+  plot(weed.mds, col = coloring, main= "MDS", xlab = "1st Dimension", ylab="2nd Dimenion")
+  xPoint = max(weed.mds[,1]) - 1 * (max(weed.mds[,1])-min(weed.mds[,1]))
+  yPoint = max(weed.mds[,2]) - 0.76 * (max(weed.mds[,2])-min(weed.mds[,2]))
+  legend (xPoint, yPoint, legend = c("Fiber", "Drug"), col = c("blue", "green2"), pch = 19)
+}
+```

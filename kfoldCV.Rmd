@@ -1,0 +1,90 @@
+---
+title: "kfoldCV"
+author: "Marc and Jordi"
+date: "5/15/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Load and prepare the data.
+```{r}
+setwd(".")
+data = read.csv("conversion.csv")
+drugs = c("ARa", "ARb", "HK", "NL", "SW", "T44a", "T44b", "FFb", "B52", "PM", "BB", "BS", "FFa", "HMW", "HA", "SWA", "MS", "RI")
+
+N = dim(data)[1]
+data$variety = rep("n", N)
+for (name in drugs) {
+  s = grepl(pattern=name, data$ID, fixed=T)
+  data$variety[s] = "d"
+}
+s = grepl(pattern="CHNL", data$ID, fixed=T)
+data$variety[s] = "n"
+
+data$variety = as.factor(data$variety)
+table(data$variety)
+```
+
+Functions for calculating accuracy of a PCA based model
+```{r}
+discriminant <- function(model, pred.data, numPC){
+  pred.data = as.data.frame(princomp(pred.data)$scores)[,1:numPC]
+  p = predict(model, pred.data, type="response")
+
+  for(i in 1:length(p)) {
+    if (p[i] >= 0.5){
+      p[i] = 1;
+    }
+    else{
+      p[i] = 0;
+    }
+  }
+  return(p);
+}
+
+accuracy <- function(predict, newdata){
+  (t = table(predict, newdata))
+  print(t)
+  prob = prop.table(t)
+  return(prob[1,1]+prob[2,2])
+}
+
+model.accuracy <- function(model, dataset, numPC){
+  answer = dataset$variety
+  dataset = dataset[,2:174]
+  d = discriminant(model, dataset, numPC)
+  return(accuracy(d, answer))
+}
+```
+
+### k-fold CV
+
+```{r echo=F}
+accuracy.pc = c()
+x.pc = c(2: 30)
+library(TunePareto) # for generateCVRuns()
+for (numPC in x.pc) {
+  numFolds = 5
+  set.seed(123)
+  acc <- c()
+  folds = generateCVRuns(data$variety, ntimes=1, nfold=numFolds, stratified=TRUE)
+  for(i in 1:numFolds){
+      #Segement your data by fold using the which() function
+      testIndexes = unlist(folds[[1]][[i]])
+      test <- data[testIndexes, ]
+      train <- data[-testIndexes, ]
+      # PCA
+      pca.train = as.data.frame(princomp(train[,2:174])$scores)
+
+      mod = glm(train$variety ~ ., data=pca.train[,1:numPC], family=binomial(link="logit"))
+      acc[i] = model.accuracy(mod, test, numPC)
+  }
+  accuracy.pc[numPC] = sum(acc) / numFolds
+}
+```
+
+```{r}
+plot(accuracy.pc*100, main = "5-fold CV accuracy", xlab="Number of Principal Components used", ylab = "Test accuracy (%)", type= "b")
+```

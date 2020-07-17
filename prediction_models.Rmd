@@ -1,0 +1,194 @@
+---
+title: "Prediction models"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(caret)
+library(ggplot2)
+library(plot3D)
+library(reshape2)
+library(MASS)
+```
+
+
+```{r}
+data <- read.csv2("conversion.csv", header=TRUE, sep=",")
+head(data)
+```
+
+Add variety distinction classification:
+  D : psychoactive variety
+  N :  non-psychoactive variety
+```{r}
+drugs = c("ARa", "ARb", "HK", "NL", "SW", "T44a", "T44b", "FFb", "B52", "PM", "BB", "BS", "FFa", "HMW", "HA", "SWA", "MS", "RI")
+N = 1324
+data$variety = rep("N", N)
+for (name in drugs) {
+  name = paste0("^", name)
+  s = grepl(pattern=name, data$ID, fixed=F)
+  data$variety[s] = "D"
+}
+data$variety = as.factor(data$variety)
+summary(data$variety)
+```
+
+
+Data is divided in train and test datasets:
+  dataTrain =  (1/3) * data
+  dataTest = (2/3) * data
+```{r}
+nPart = (1/3) * nrow(data)
+
+index = sample(nrow(data), nPart)
+dataTest = data[index,]
+dataTrain = data[-index,]
+
+nrow(dataTest)
+nrow(dataTrain)
+```
+
+
+----------------PCA MODELS--------------------------------
+```{r}
+PC = princomp(dataTrain[,2:174])
+var_pc = PC$sdev^2
+frac_pc = var_pc / sum(var_pc)
+screeplot(PC)
+```
+
+```{r}
+pdf("screeplot.pdf")
+screeplot(PC)
+dev.off()
+```
+
+
+Functions for calculating accuracy of a PCA based model
+```{r}
+discriminant <- function(model, pred.data){
+  pred.data = as.data.frame(princomp(pred.data)$scores)
+  p = predict(model, pred.data, type="response")
+
+  for(i in 1:length(p)) {
+    if (p[i] >= 0.5){
+      p[i] = 1;
+    }
+    else{
+      p[i] = 0;
+    }
+  }
+  return(p);
+}
+
+accuracy <- function(predict, newdata){
+  (t = table(predict, newdata))
+  print(t)
+  prob = prop.table(t)
+  return(prob[1,1]+prob[2,2])
+}
+
+model.accuracy <- function(model, dataset){
+  answer = dataset$variety
+  dataset = dataset[,2:174]
+  d = discriminant(model, dataset)
+  return(accuracy(d, answer))
+}
+```
+
+
+Model using 2 first PC
+```{r}
+ncomp = 2
+sc = PC$scores
+sc = as.data.frame(sc[,1:ncomp])
+glm.PC.2 = glm(dataTrain$variety ~ ., data=sc, family=binomial(link=logit))
+model.accuracy(glm.PC.2, dataTest)
+```
+
+Model using 3 first PC
+```{r}
+ncomp = 3
+sc = PC$scores
+sc = as.data.frame(sc[,1:ncomp])
+glm.PC.3 = glm(dataTrain$variety ~ ., data=sc, family=binomial(link=logit))
+model.accuracy(glm.PC.3, dataTest)
+```
+
+Model using 4 first PC
+```{r}
+ncomp = 4
+sc = PC$scores
+sc = as.data.frame(sc[,1:ncomp])
+glm.PC.4 = glm(dataTrain$variety ~ ., data=sc, family=binomial(link=logit))
+model.accuracy(glm.PC.4, dataTest)
+```
+
+Accuracy of all PCA based models (1,...,30 PC's used)
+```{r echo=F, results='hide'}
+results = vector()
+for(i in 2:30){
+  ncomp = i
+  sc = PC$scores
+  sc = as.data.frame(sc[,1:ncomp])
+  mod = glm(dataTrain$variety ~ ., data=sc, family=binomial(link=logit))
+  acc = model.accuracy(mod, dataTest)
+  results <- c(results, acc)
+}
+```
+
+```{r}
+p = plot(c(2:30), results*100, type="h", xlab="Number of Principal Components used", ylab="Test accuracy (%)")
+p
+```
+
+```{r}
+pdf("PCA_accuracy.pdf")
+plot(c(2:30), results*100, type="h", xlab="Number of Principal Components used", ylab="Test accuracy (%)")
+dev.off()
+```
+
+
+----------------FULL MODEL--------------------------------
+
+```{r}
+discriminant <- function(model, pred.data){
+  p = predict(model, pred.data, type="response")
+
+  for(i in 1:length(p)) {
+    if (p[i] >= 0.5){
+      p[i] = 1;
+    }
+    else{
+      p[i] = 0;
+    }
+  }
+  return(p);
+}
+
+accuracy <- function(predict, newdata){
+  (t = table(predict, newdata))
+  print(t)
+  prob = prop.table(t)
+  return(prob[1,1]+prob[2,2])
+}
+
+model.accuracy <- function(model, dataset){
+  answer = dataset$variety
+  dataset = dataset[,2:174]
+  d = discriminant(model, dataset)
+  return(accuracy(d, answer))
+}
+```
+
+```{r}
+mod <- glm(dataTrain$variety ~., data=dataTrain[,2:174], family=binomial(link=logit))
+```
+
+```{r}
+model.accuracy(mod, dataTrain)
+```
